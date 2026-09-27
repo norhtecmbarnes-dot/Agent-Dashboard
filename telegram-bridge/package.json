@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "test": "node --test \"test/**/*.test.js\"",
     "check": "node --check index.js && node --check src/openmuse.js && node --check src/format.js && node --check src/config.js"
   },
   "dependencies": {

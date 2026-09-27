@@ -18,7 +18,14 @@ Phone (Telegram) ──► telegram-bridge ──► OpenMuse API (:8787) ──
 | `src/openmuse.js` | OpenMuse HTTP client (session, run + reply, snapshots, approvals) |
 | `src/config.js` | Environment loading and validation |
 | `src/format.js` | Telegram chunking and task summaries |
+| `test/bridge.test.js` | Unit tests for the client and formatters (mock fetch) |
 | `reference/TELEGRAM-SETUP.md` | Architecture notes from the original PersonalAI Dashboard |
+
+## Tests
+
+```bash
+npm test
+```
 
 ## How it talks to OpenMuse
 
