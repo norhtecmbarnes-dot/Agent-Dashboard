@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+.expo/
+
+# Cloned copies of the runtime (OpenMuse is a separate repo)
+OpenMuse/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log

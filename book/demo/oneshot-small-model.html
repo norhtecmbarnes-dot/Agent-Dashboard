@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Neon Pong</title>
+  <style>
+    body { background: #000; color: #fff; margin: 0; overflow: hidden; }
+    canvas { display: block; background: #000; }
+    #score { position: absolute; top: 20px; right: 20px; font-family: Consolas, monospace; font-size: 2em; }
+  </style>
+</head>
+<body>
+  <canvas id="pong"></canvas>
+  <div id="score"></div>
+  <script>
+    const canvas = document.getElementById('pong');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const scoreDiv = document.getElementById('score');
+    let left = 100, right = canvas.width - 100, paddleWidth = 10, paddleHeight = 60;
+    let ballX = canvas.width / 2, ballY = canvas.height / 2, ballRadius = 8;
+    let dx = 2, dy = 2, score = [0, 0];
+    let aiSpeed = 4;
+
+    function drawPaddle(x, y, width, height) {
+      ctx.fillStyle = `rgb(0,255,0,0.8)`;
+      ctx.fillRect(x, y, width, height);
+    }
+
+    function drawBall() {
+      ctx.fillStyle = `rgb(255,0,0,0.8)`;
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function drawScore() {
+      ctx.fillStyle = '#fff';
+      ctx.font = "2em Consolas, monospace";
+      ctx.fillText(`${score[0]} - ${score[1]}`, 10, 40);
+    }
+
+    function update() {
+      // Left paddle movement
+      if (left < paddleHeight && right < paddleHeight) return;
+      if (left > canvas.height - paddleHeight && right > canvas.height - paddleHeight) return;
+      if (left < paddleHeight) left++;
+      if (left > canvas.height - paddleHeight) left--;
+      // Right paddle (AI)
+      if (ballY < paddleHeight) aiSpeed = 6;
+      if (ballY > canvas.height - paddleHeight) aiSpeed = 4;
+      right = Math.max(right, canvas.height - paddleHeight - aiSpeed);
+      right = Math.min(right, canvas.height - paddleHeight);
+      if (ballY < right) right--;
+      if (ballY > right + paddleHeight) right++;
+      // Ball movement
+      ballX += dx;
+      ballY += dy;
+      // Left paddle hit
+      if (ballX - ballRadius < left + paddleWidth) {
+        if (ballY > left && ballY < left + paddleHeight) {
+          dx = -dx;
+        }
+      }
+      // Right paddle hit
+      if (ballX + ballRadius > right - paddleWidth) {
+        if (ballY > right && ballY < right + paddleHeight) {
+          dx = -dx;
+        }
+      }
+      // Wall hits
+      if (ballY < ballRadius) {
+        dy = -dy;
+      }
+      if (ballY > canvas.height - ballRadius) {
+        dy = -dy;
+      }
+      if (ballX < ballRadius) {
+        score[1]++;
+        drawScore();
+        reset();
+      }
+      if (ballX > canvas.width - ballRadius) {
+        score[0]++;
+        drawScore();
+        reset();
+      }
+    }
+
+    function reset() {
+      ballX = canvas.width / 2;
+      ballY = canvas.height / 2;
+      dx = 2;
+      dy = 2;
+      score = [0, 0];
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawPaddle(left, ballY - paddleHeight/2, paddleWidth, paddleHeight);
+      drawPaddle(right, ballY - paddleHeight/2, paddleWidth, paddleHeight);
+      drawBall();
+      drawScore();
+      if (score[0] >= 5 || score[1] >= 5) {
+        alert(`Player ${score[0] === score[1] ? 'Tie' : score[0] === 5 ? '1' : '2'} wins!`);
+        location.reload();
+      }
+      update();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.code === 'ArrowUp') left--;
+      if (e.code === 'ArrowDown') left++;
+    });
+
+    gameLoop();
+  </script>
+</body>
+</html>

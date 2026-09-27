@@ -1,0 +1,19 @@
+{
+  "name": "agent-dashboard-telegram-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram bridge for Agent Dashboard / OpenMuse",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js && node --check src/openmuse.js && node --check src/format.js && node --check src/config.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0"
+  }
+}
