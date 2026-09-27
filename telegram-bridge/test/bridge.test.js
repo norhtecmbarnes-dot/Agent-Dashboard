@@ -108,7 +108,8 @@ test("pendingActions returns only awaiting_review actions", async () => {
   );
 });
 
-test("chat dispatches a run and polls until the assistant reply appears", async () => {
+test("chat dispatches a run and follows events to RUN_FINISHED", async () => {
+  let dispatched = false;
   let polls = 0;
   const fetchImpl = mockFetch((url, options) => {
     if (url.endsWith("/api/session")) return { status: 200, body: { token: "t", mode: "sample" } };
@@ -118,20 +119,19 @@ test("chat dispatches a run and polls until the assistant reply appears", async 
       assert.equal(body.threadId, "thread-1");
       assert.equal(body.messages[0].content, "hello");
       assert.equal(body.messages[0].role, "user");
+      dispatched = true;
       return { status: 200, body: { threadId: "thread-1", runId: body.runId, joinToken: "j" } };
     }
-    if (url.includes("/threads/thread-1/messages")) {
+    if (url.includes("/threads/thread-1/events")) {
+      if (!dispatched) return { status: 200, body: { events: [] } };
       polls += 1;
-      if (polls === 1) return { status: 200, body: { messages: [] } };
-      return {
-        status: 200,
-        body: {
-          messages: [
-            { id: "u1", role: "user", content: "hello" },
-            { id: "a1", role: "assistant", content: "hi there" },
-          ],
-        },
-      };
+      const full = [
+        { type: "RUN_STARTED" },
+        { type: "TEXT_MESSAGE_CONTENT", delta: "hi " },
+        { type: "TEXT_MESSAGE_CONTENT", delta: "there" },
+        { type: "RUN_FINISHED" },
+      ];
+      return { status: 200, body: { events: polls === 1 ? full.slice(0, 3) : full } };
     }
     return { status: 404, body: {} };
   });
@@ -139,6 +139,41 @@ test("chat dispatches a run and polls until the assistant reply appears", async 
   const result = await api.chat("hello");
   assert.equal(result.text, "hi there");
   assert.equal(result.threadId, "thread-1");
+});
+
+test("chat does not treat a tool result as the final reply", async () => {
+  let dispatched = false;
+  const fetchImpl = mockFetch((url) => {
+    if (url.endsWith("/api/session")) return { status: 200, body: { token: "t", mode: "sample" } };
+    if (url.includes("/agent/default/run")) {
+      dispatched = true;
+      return { status: 200, body: { threadId: "t1" } };
+    }
+    if (url.includes("/threads/t1/events")) {
+      if (!dispatched) return { status: 200, body: { events: [] } };
+      // A tool call and its result arrive first; the actual reply comes later.
+      return {
+        status: 200,
+        body: {
+          events: [
+            { type: "RUN_STARTED" },
+            { type: "TOOL_CALL_START", toolCallId: "c1", toolCallName: "browse_web" },
+            { type: "TOOL_CALL_RESULT", toolCallId: "c1", content: "raw page json" },
+            { type: "TEXT_MESSAGE_CONTENT", delta: "CopilotKit builds agent UIs." },
+            { type: "RUN_FINISHED" },
+          ],
+        },
+      };
+    }
+    return { status: 404, body: {} };
+  });
+  const api = new OpenMuseClient({ baseUrl: "http://x", fetchImpl, pollIntervalMs: 1, timeoutMs: 5000 });
+  const result = await api.chat("summarize copilotkit.ai", { threadId: "t1" });
+  assert.equal(result.text, "CopilotKit builds agent UIs.");
+  assert.deepEqual(
+    result.toolCalls.map((c) => c.name),
+    ["browse_web"],
+  );
 });
 
 test("chat on a brand-new thread tolerates a missing baseline", async () => {
@@ -149,10 +184,18 @@ test("chat on a brand-new thread tolerates a missing baseline", async () => {
       dispatched = true;
       return { status: 200, body: { threadId: "fresh-1" } };
     }
-    if (url.includes("/threads/fresh-1/messages")) {
+    if (url.includes("/threads/fresh-1/events")) {
       // Before the run the thread does not exist yet; the client must tolerate that.
       if (!dispatched) return { status: 500, body: { error: "Thread not found" } };
-      return { status: 200, body: { messages: [{ id: "a1", role: "assistant", content: "ok" }] } };
+      return {
+        status: 200,
+        body: {
+          events: [
+            { type: "TEXT_MESSAGE_CONTENT", delta: "ok" },
+            { type: "RUN_FINISHED" },
+          ],
+        },
+      };
     }
     return { status: 404, body: {} };
   });
@@ -169,18 +212,16 @@ test("chat forwards tool calls once", async () => {
       dispatched = true;
       return { status: 200, body: { threadId: "t1" } };
     }
-    if (url.includes("/threads/t1/messages")) {
-      if (!dispatched) return { status: 200, body: { messages: [] } };
+    if (url.includes("/threads/t1/events")) {
+      if (!dispatched) return { status: 200, body: { events: [] } };
       return {
         status: 200,
         body: {
-          messages: [
-            {
-              id: "a1",
-              role: "assistant",
-              content: "working",
-              toolCalls: [{ id: "call-1", name: "delegate_task" }],
-            },
+          events: [
+            { type: "TOOL_CALL_START", toolCallId: "call-1", toolCallName: "delegate_task" },
+            { type: "TOOL_CALL_START", toolCallId: "call-1", toolCallName: "delegate_task" },
+            { type: "TEXT_MESSAGE_CONTENT", delta: "working" },
+            { type: "RUN_FINISHED" },
           ],
         },
       };
@@ -193,11 +234,33 @@ test("chat forwards tool calls once", async () => {
   assert.deepEqual(seen, ["call-1"]);
 });
 
+test("chat surfaces a RUN_ERROR", async () => {
+  let dispatched = false;
+  const fetchImpl = mockFetch((url) => {
+    if (url.endsWith("/api/session")) return { status: 200, body: { token: "t", mode: "sample" } };
+    if (url.includes("/agent/default/run")) {
+      dispatched = true;
+      return { status: 200, body: { threadId: "t1" } };
+    }
+    if (url.includes("/threads/t1/events")) {
+      if (!dispatched) return { status: 200, body: { events: [] } };
+      return {
+        status: 200,
+        body: { events: [{ type: "RUN_ERROR", message: "model unavailable" }] },
+      };
+    }
+    return { status: 404, body: {} };
+  });
+  const api = new OpenMuseClient({ baseUrl: "http://x", fetchImpl, pollIntervalMs: 1, timeoutMs: 5000 });
+  await assert.rejects(() => api.chat("hi", { threadId: "t1" }), /model unavailable/);
+});
+
 test("chat times out with a clear error", async () => {
   const fetchImpl = mockFetch((url) => {
     if (url.endsWith("/api/session")) return { status: 200, body: { token: "t", mode: "sample" } };
     if (url.includes("/agent/default/run")) return { status: 200, body: { threadId: "t1" } };
-    if (url.includes("/threads/t1/messages")) return { status: 200, body: { messages: [] } };
+    if (url.includes("/threads/t1/events"))
+      return { status: 200, body: { events: [{ type: "RUN_STARTED" }] } };
     return { status: 404, body: {} };
   });
   const api = new OpenMuseClient({ baseUrl: "http://x", fetchImpl, pollIntervalMs: 1, timeoutMs: 30 });

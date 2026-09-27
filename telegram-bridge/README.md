@@ -36,9 +36,11 @@ web/native client does:
 2. `GET /api/main-thread` → the stable conversation thread id.
 3. `POST /api/copilotkit/agent/default/run` with the user message, dispatches a run
    to the CopilotKit runtime (which forwards to the configured model).
-4. The reply is read back from the persisted CopilotKit Intelligence thread via
-   `GET /api/copilotkit/threads/:id/messages`, polled until the assistant
-   message appears.
+4. The thread's AG-UI event log (`GET /api/copilotkit/threads/:id/events`) is followed
+   until `RUN_FINISHED`; the reply is assembled from the `TEXT_MESSAGE_CONTENT`
+   deltas. Following the event stream to completion (rather than stopping at the
+   first non-user output) is what lets a multi-step run — e.g. `browse_web` then a
+   written summary — return the model's final answer instead of raw tool JSON.
 
 This is the same path the mobile and web clients use, so it works with any model
 OpenMuse is configured for (local Ollama, a hosted provider, or AG-UI).

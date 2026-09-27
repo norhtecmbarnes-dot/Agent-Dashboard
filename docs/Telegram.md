@@ -65,8 +65,9 @@ Send any message to your bot — the agent replies.
   1. `POST /api/session` opens a session token
   2. `GET /api/main-thread` gives the stable conversation thread
   3. `POST /api/copilotkit/agent/default/run` dispatches your message to the CopilotKit runtime
-  4. the reply is read back from the persisted CopilotKit Intelligence thread
-     (`GET /api/copilotkit/threads/:id/messages`) and sent to Telegram
+  4. the AG-UI event log (`GET /api/copilotkit/threads/:id/events`) is followed to
+     `RUN_FINISHED` and the reply is assembled from its text deltas — so multi-step
+     runs (browse a page, then summarize it) return the final answer, not tool output
 - `/new` starts a fresh thread; without it your Telegram messages continue on the main thread
 - When the agent has prepared an action (e.g. a computer command or email send), `/approvals`
   lists it with ✅ / ❌ inline buttons that decide the review through the API

@@ -1,21 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-const REPLY_ROLES = new Set(["assistant", "tool"]);
-
-function textOf(content) {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part.text === "string") return part.text;
-        return "";
-      })
-      .join("");
-  }
-  return "";
-}
-
 /**
  * A thin client for the OpenMuse HTTP API.
  *
@@ -139,30 +123,39 @@ export class OpenMuseClient {
     return Array.isArray(data.messages) ? data.messages : [];
   }
 
+  /** Ordered AG-UI event log for a thread (RUN_STARTED, TEXT_MESSAGE_CONTENT, RUN_FINISHED...). */
+  async threadEvents(threadId) {
+    await this.#ensureSession();
+    const data = await this.#json(`/api/copilotkit/threads/${encodeURIComponent(threadId)}/events`);
+    return Array.isArray(data.events) ? data.events : [];
+  }
+
   /**
    * Send one user message and wait for the agent's reply.
    *
-   * Dispatches a run to the CopilotKit runtime, then polls the persisted
-   * Intelligence thread until a new assistant/tool message appears. Returns
-   * `{ text, threadId, runId, toolCalls }`.
+   * Dispatches a run to the CopilotKit runtime, then follows the thread's AG-UI
+   * event log until the run finishes, assembling the assistant text from
+   * TEXT_MESSAGE_CONTENT deltas. A tool result alone is not a reply, so the
+   * stream is followed to RUN_FINISHED rather than stopping at the first
+   * non-user output. Returns `{ text, threadId, runId, toolCalls }`.
    */
   async chat(prompt, { threadId, onToolCall } = {}) {
     await this.#ensureSession();
     const targetThread = threadId || (await this.mainThread());
-    // A brand-new thread does not exist in Intelligence until its first run,
-    // so an empty baseline is expected and correct in that case.
-    let before = [];
+    // A brand-new thread has no event log until its first run, so a missing
+    // baseline is expected and correct. The cursor advances on every poll so
+    // events are never processed twice.
+    let cursor = 0;
     try {
-      before = await this.threadMessages(targetThread);
+      cursor = (await this.threadEvents(targetThread)).length;
     } catch {
-      before = [];
+      cursor = 0;
     }
-    const knownIds = new Set(before.map((m) => m.id));
 
-    const runId = randomUUID();
+    const dispatchRunId = randomUUID();
     const input = {
       threadId: targetThread,
-      runId,
+      runId: dispatchRunId,
       state: null,
       messages: [{ id: randomUUID(), role: "user", content: prompt }],
       tools: [],
@@ -175,41 +168,55 @@ export class OpenMuseClient {
     });
     const canonicalThread = dispatched?.threadId || targetThread;
 
+    const toolCalls = [];
     const seenToolCalls = new Set();
+    let text = "";
+    let runId = dispatched?.runId || dispatchRunId;
+    let settled = false;
+    let runError = null;
     const deadline = Date.now() + this.timeoutMs;
     let lastError = null;
 
     while (Date.now() < deadline) {
       await sleep(this.pollIntervalMs);
-      let messages;
+      let events;
       try {
-        messages = await this.threadMessages(canonicalThread);
+        events = await this.threadEvents(canonicalThread);
       } catch (error) {
         lastError = error;
         continue;
       }
-      const fresh = messages.filter((m) => !knownIds.has(m.id) && m.role !== "user");
-      const toolCalls = [];
-      for (const message of fresh) {
-        if (message.role !== "assistant") continue;
-        for (const call of message.toolCalls || []) {
-          if (seenToolCalls.has(call.id)) continue;
-          seenToolCalls.add(call.id);
-          toolCalls.push(call);
-          if (onToolCall) await onToolCall(call);
+      const fresh = events.length >= cursor ? events.slice(cursor) : events;
+      cursor = events.length;
+      for (const event of fresh) {
+        if (event.run_id || event.runId) runId = event.run_id || event.runId;
+        if (event.type === "TEXT_MESSAGE_CONTENT" && typeof event.delta === "string") {
+          text += event.delta;
+        } else if (event.type === "TOOL_CALL_START") {
+          const id = event.toolCallId;
+          if (id && !seenToolCalls.has(id)) {
+            seenToolCalls.add(id);
+            const call = { id, name: String(event.toolCallName || "tool") };
+            toolCalls.push(call);
+            if (onToolCall) await onToolCall(call);
+          }
+        } else if (event.type === "RUN_ERROR") {
+          runError = typeof event.message === "string" ? event.message : "The agent reported an error";
+        } else if (event.type === "RUN_FINISHED") {
+          settled = true;
         }
       }
-      const reply = fresh
-        .filter((m) => REPLY_ROLES.has(m.role))
-        .map((m) => textOf(m.content))
-        .filter((t) => t.trim())
-        .join("\n\n")
-        .trim();
-      if (reply) return { text: reply, threadId: canonicalThread, runId, toolCalls };
+      if (settled || runError) break;
     }
 
-    const suffix = lastError ? ` Last error: ${lastError.message}` : "";
-    throw new Error(`The agent did not reply within ${Math.round(this.timeoutMs / 1000)}s.${suffix}`);
+    if (runError) throw new Error(runError);
+    if (!settled) {
+      const suffix = lastError ? ` Last error: ${lastError.message}` : "";
+      throw new Error(
+        `The agent did not reply within ${Math.round(this.timeoutMs / 1000)}s.${suffix}`,
+      );
+    }
+    return { text: text.trim(), threadId: canonicalThread, runId, toolCalls };
   }
 
   /** Start a brand-new Rich Threads conversation. */
