@@ -69,3 +69,7 @@ The app needs to reach the OpenMuse API (port 8787):
 - [ ] App loads and shows a chat screen
 - [ ] Message sent from the phone gets a streamed reply
 - [ ] `http://<PC-LAN-IP>:8787/api/health` reachable from the phone's browser
+
+## Credits
+
+The mobile client (`apps/mobile`) is [OpenMuse](https://github.com/CopilotKit/OpenMuse)'s Expo/React Native app (MIT), used as-is. This guide covers pointing it at your own API.

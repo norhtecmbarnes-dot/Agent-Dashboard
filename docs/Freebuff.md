@@ -89,3 +89,9 @@ You'll get a PR URL you can review and merge — or comment on for another round
 ## How this fits Agent Dashboard
 
 Freebuff is the **coding agent** for repos; Agent Dashboard is the **personal agent** for everything else (browser, terminal, phone). They share a philosophy: open tools, your machine, your rules. Use Freebuff when the task is "change this codebase," use your dashboard when the task is "go find out and report back."
+
+> That philosophy comes from [OpenMuse](https://github.com/CopilotKit/OpenMuse) (CopilotKit, MIT) - the agent runtime Agent Dashboard runs on. The worked example in this doc even forks OpenMuse itself.
+
+## Credits
+
+The agent runtime under Agent Dashboard is [OpenMuse](https://github.com/CopilotKit/OpenMuse) (CopilotKit, MIT) - the project that originated the personal agent with a browser, a sandboxed computer, receipts, and durable work.

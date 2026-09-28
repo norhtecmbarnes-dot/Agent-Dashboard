@@ -91,3 +91,7 @@ Send any message to your bot — the agent replies.
 - **Never commit the bot token.** Keep it in `.env` (gitignored)
 - The bridge filters by `TELEGRAM_CHAT_ID` — do not leave it empty
 - Your messages flow: phone → Telegram servers → your bridge → your local API. The agent's replies reverse that path. Nothing goes to any third-party AI service
+
+## Credits
+
+The bridge talks to the [OpenMuse](https://github.com/CopilotKit/OpenMuse) API (MIT, by CopilotKit) using the same endpoints as OpenMuse's own clients. The bridge itself is Agent Dashboard's addition.

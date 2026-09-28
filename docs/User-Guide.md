@@ -4,6 +4,8 @@ Agent Dashboard's web UI (OpenMuse) is a single workspace with panels for chat, 
 
 Open the UI at **http://localhost:8081** (API on :8787).
 
+> **Credit where due:** the UI and the agent architecture are [OpenMuse](https://github.com/CopilotKit/OpenMuse) (CopilotKit, MIT) — the project that originated the agent-with-a-computer idea, the receipts, and the durable-work model. Agent Dashboard packages it for local-first use.
+
 ## Chat
 
 The main panel. Every message goes to the agent loop, which is driven by your model (gpt-oss-120b via Ollama).

@@ -8,7 +8,8 @@ Get Agent Dashboard running end to end: model → API → web UI → (optional) 
 |---|---|---|
 | Node | 24 LTS | `node -v` |
 | pnpm | 11.19.0 | `pnpm -v` |
-| Ollama | ≥ 0.13.3 | `ollama -v` |
+| llama.cpp | recent build | `llama-server --version` — **default backend** |
+| Ollama | ≥ 0.13.3 | `ollama -v` (alternative, easiest) |
 | Docker | any recent | `docker -v` (optional, for the Linux computer) |
 | RAM/VRAM | ~64 GB+ for 120b, or use 20b | `nvidia-smi` / system info |
 | Free disk | ~80–100 GB for the full stack | see `docs/Model-Setup.md` storage table |
@@ -28,16 +29,21 @@ git clone https://github.com/CopilotKit/OpenMuse.git OpenMuse
 
 ## 2. Model backend
 
+**Default: llama.cpp** — best performance. (Ollama works too; any OpenAI-compatible server works — see `docs/Model-Setup.md`.)
+
 ```bash
-ollama pull gpt-oss:120b     # ~61 GiB — see docs/Model-Setup.md for sizing
+llama-server -hf ggml-org/gpt-oss-120b-GGUF --jinja --port 8080 --host 127.0.0.1
+# ~61 GiB weights — see docs/Model-Setup.md for sizing
 # smaller machines:
-# ollama pull gpt-oss:20b
+# llama-server -hf ggml-org/gpt-oss-20b-GGUF --jinja --port 8080 --host 127.0.0.1
+# or with Ollama instead:
+# ollama pull gpt-oss:120b
 ```
 
 Smoke test the Responses API:
 
 ```bash
-curl http://127.0.0.1:11434/v1/responses -H "Content-Type: application/json" \
+curl http://127.0.0.1:8080/v1/responses -H "Content-Type: application/json" \
   -d '{"model":"gpt-oss:120b","input":"ping"}'
 ```
 
@@ -56,8 +62,9 @@ Edit `.env`:
 ```env
 AGENT_BACKEND=model
 MODEL=openai/gpt-oss:120b
-OPENAI_BASE_URL=http://127.0.0.1:11434/v1
-OPENAI_API_KEY=ollama-local
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1      # llama.cpp (default)
+# OPENAI_BASE_URL=http://127.0.0.1:11434/v1   # if you chose Ollama instead
+OPENAI_API_KEY=local
 CPK_INTELLIGENCE_API_KEY=<from npx copilotkit@latest login>
 ```
 
@@ -86,7 +93,11 @@ Open **http://localhost:8081** and send a chat message — it should stream back
 
 ## Verification checklist
 
-- [ ] `curl http://localhost:8787/api/health` → healthy
+- [ ] `curl http://localhost:8787/api/health` — healthy
 - [ ] Chat in the web UI streams from gpt-oss-120b
 - [ ] `docker ps` shows `openmuse-computer` (if enabled)
 - [ ] Telegram message from phone gets a reply (if bridge is running)
+
+## Credits
+
+The agent-computer architecture — the sandboxed Docker computer, command receipts, and durable task work — comes from [OpenMuse](https://github.com/CopilotKit/OpenMuse) by the CopilotKit team (MIT). Agent Dashboard packages it with local-first model guides, the Telegram bridge, and Android setup. See [Chapter 23](../book/Chapter-23-Where-The-Idea-Came-From.md) for the full story.

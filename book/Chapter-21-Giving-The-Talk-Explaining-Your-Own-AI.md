@@ -323,3 +323,5 @@ Your dashboard is built, your knowledge base is loaded, and your talk is ready. 
 And when someone asks you why you built your own AI instead of just using ChatGPT, you now have the answer: *because the only way to keep your data private is to run your own LLM — and because a prompt plus your knowledge beats a rented brain every time.*
 
 *Remember: this book is open source (CC BY-SA 4.0) and the code is MIT licensed. If you give this talk, share what you learned — that's how we all get better together.*
+
+*One more thing for the Q&A: someone will ask where the dashboard idea came from. Chapter 23 gives you the honest answer — [OpenMuse](https://github.com/CopilotKit/OpenMuse) — and the one-line explanation of why your setup runs on whatever model you choose.*

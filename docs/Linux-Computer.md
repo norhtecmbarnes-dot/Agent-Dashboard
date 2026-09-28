@@ -58,3 +58,7 @@ What this means in practice: the agent can *compute* for you (write scripts, pro
 ## Receipts
 
 Every terminal command produces a receipt: the command, its output, and the exit code. Check them in the UI after a session to review exactly what ran — this is your audit trail for anything the agent did on its computer.
+
+## Credits
+
+The sandboxed computer design in this doc — nonroot container, no mounts, no network, command receipts — is OpenMuse's design (`apps/computer` in the [OpenMuse](https://github.com/CopilotKit/OpenMuse) repo, MIT). This guide just explains how to build and use it.
