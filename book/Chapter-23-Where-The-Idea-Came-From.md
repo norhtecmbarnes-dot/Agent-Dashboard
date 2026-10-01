@@ -28,13 +28,13 @@ Agent Dashboard wraps OpenMuse and adds the parts it doesn't ship: the Telegram 
 
 OpenMuse's architecture made a choice easy that most AI products make hard: **the agent doesn't care which model thinks for it.** The API speaks one language — an OpenAI-compatible endpoint — so any model server that speaks that dialect works, and OpenMuse also talks to Anthropic and Google models natively.
 
-That's a big deal. It means your dashboard is a *shape*, not a subscription. Today's default in this project is llama.cpp because, on the machines this book targets, it gives the best performance for gpt-oss-120b: lower overhead, tighter control over context and offload, and no extra service running alongside it. Tomorrow, if a better open model lands, you change one line.
+That's a big deal. It means your dashboard is a *shape*, not a subscription. Today's default in this project is llama.cpp because, on the machines this book targets, it gives the best performance for gpt-oss-120b: lower overhead, tighter control over context and offload. (The one wrinkle: llama.cpp and OpenMuse disagree about a small detail in the Responses API request, so this project ships a tiny helper — the "shim" — that smooths it over. It's in the `llamacpp-shim/` folder, it's about eighty lines, and you start it with one command. Ollama doesn't need it.) Tomorrow, if a better open model lands, you change one line.
 
 Here's the whole decision, in one table:
 
 | Backend | Why pick it | Config |
 |---|---|---|
-| **llama.cpp** (default) | Best raw performance; you control everything | `OPENAI_BASE_URL=http://127.0.0.1:8080/v1` |
+| **llama.cpp** (default) | Best raw performance; you control everything | `OPENAI_BASE_URL=http://127.0.0.1:8391/v1` (via the bundled shim) |
 | **Ollama** | Easiest setup; model management built in | `OPENAI_BASE_URL=http://127.0.0.1:11434/v1` |
 | **LM Studio / vLLM / any OpenAI-compatible server** | Whatever you already run | Point `OPENAI_BASE_URL` at its `/v1` |
 | **Anthropic or Google** | Frontier quality, no local hardware | Set `MODEL=anthropic/...` or `MODEL=google/...` + API key |
@@ -57,7 +57,7 @@ The right model is the one that fits your machine and your work. A laptop with 1
 ## Common Pitfalls
 
 - **Assuming Ollama is required.** It isn't. Any OpenAI-compatible `/v1` endpoint works. Ollama is the easy option, not the only one.
-- **Forgetting the Responses API caveat.** OpenMuse expects `/v1/responses`. Ollama ≥ 0.13.3 and current llama.cpp builds have it; older builds don't. The smoke test catches this in ten seconds.
+- **Forgetting the Responses API caveat.** OpenMuse expects `/v1/responses`. Ollama ≥ 0.13.3 and current llama.cpp builds have the route — but llama.cpp's version rejects the exact content-part type OpenMuse sends (`400 Bad Request`). That's what `llamacpp-shim/` fixes; point `OPENAI_BASE_URL` at the shim (`:8391`), not llama-server directly (`:8080`). The smoke test in `docs/Model-Setup.md` catches both cases in ten seconds.
 - **Dropping the `openai/` prefix** when pointing at a local server. The agent will fail to call tools, and you'll waste an evening on a one-character fix.
 - **Starving slow local models.** A 120b model on a CPU-heavy box can take minutes per run. OpenMuse defaults to a 20-minute timeout (`MODEL_TIMEOUT_MS`) — raise it if your hardware needs more, instead of blaming the agent.
 

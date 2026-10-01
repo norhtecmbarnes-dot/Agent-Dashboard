@@ -1,0 +1,18 @@
+{
+  "name": "llamacpp-responses-shim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny proxy that adapts OpenMuse's OpenAI Responses API requests to llama.cpp's /v1/responses",
+  "type": "module",
+  "main": "shim.mjs",
+  "bin": {
+    "llamacpp-responses-shim": "shim.mjs"
+  },
+  "scripts": {
+    "start": "node shim.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

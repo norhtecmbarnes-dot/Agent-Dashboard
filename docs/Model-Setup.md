@@ -2,7 +2,7 @@
 
 Agent Dashboard drives the agent with **gpt-oss**, OpenAI's open-weight model. This guide covers sizing, serving with **llama.cpp (the default — best performance)** or Ollama (easiest), and how to point the agent at *any* OpenAI-compatible server you already run.
 
-> **Model-agnostic by design.** The agent talks to one protocol: an OpenAI-compatible endpoint. Any server that speaks it works — llama.cpp, Ollama, LM Studio, vLLM, a cloud provider — and Anthropic or Google models work natively. This project *defaults* to llama.cpp because it gives the best raw performance for gpt-oss locally: less overhead, tighter control over context and GPU/CPU offload, nothing extra running. The default is a preference, not a cage — see the "Any backend" table below.
+> **Model-agnostic by design.** The agent talks to one protocol: an OpenAI-compatible endpoint. Any server that speaks it works — llama.cpp, Ollama, LM Studio, vLLM, a cloud provider — and Anthropic or Google models work natively. This project *defaults* to llama.cpp because it gives the best raw performance for gpt-oss locally: lower overhead and tighter control over context and GPU/CPU offload. llama.cpp needs one tiny helper — the Responses shim in `llamacpp-shim/` — to match the API shape OpenMuse sends; Ollama needs none. The default is a preference, not a cage — see the "Any backend" table below.
 
 ## Sizing: which variant fits your machine?
 
@@ -43,6 +43,8 @@ Ollama stores weights on its own drive (check `OLLAMA_MODELS`); llama.cpp uses H
 
 ## Option A — llama.cpp (default, best performance)
 
+Start the model server:
+
 ```bash
 # GGUF: https://huggingface.co/ggml-org/gpt-oss-120b-GGUF (or unsloth/gpt-oss-120b-GGUF)
 llama-server -hf ggml-org/gpt-oss-120b-GGUF \
@@ -52,21 +54,37 @@ llama-server -hf ggml-org/gpt-oss-120b-GGUF \
 
 Guide: `github.com/ggml-org/llama.cpp/discussions/15396`
 
-Point OpenMuse at it:
+Then start the **Responses shim** (required — see the caveat below):
+
+```bash
+node llamacpp-shim/shim.mjs        # listens on :8391, forwards to :8080
+```
+
+Point OpenMuse at the shim, not llama-server directly:
 
 ```env
 MODEL=openai/gpt-oss:120b
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1
+OPENAI_BASE_URL=http://127.0.0.1:8391/v1
 OPENAI_API_KEY=local
 ```
 
-### The `/v1/responses` caveat
+> Start order on every platform: llama-server → shim → OpenMuse API → browser worker → web UI.
 
-OpenMuse expects an OpenAI-compatible **Responses API**, not just chat completions. Ollama supports `/v1/responses` (non-stateful) since 0.13.3. If your `llama-server` build lacks the route:
+### Why the shim is required
 
-1. Update llama.cpp to the latest build (current builds have it), or
-2. Use **Option B** (Ollama), or
-3. Put a tiny chat↔responses proxy in front of llama-server
+OpenMuse does not just speak "chat completions" — it speaks the OpenAI **Responses API** (`/v1/responses`). llama-server has that route, but it and OpenMuse disagree on one field: the **content-part type**. OpenMuse's client (TanStack AI) sends `{"type":"text"}`, while llama.cpp's `--jinja` template expects `{"type":"input_text"}`. Send the OpenMuse shape straight to llama-server and you get `400 Bad Request`:
+
+```bash
+# 400 — the type OpenMuse sends, straight at llama-server
+curl http://127.0.0.1:8080/v1/responses -H "Content-Type: application/json" \
+  -d '{"model":"gpt-oss:120b","input":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}'
+
+# 200 — same request through the shim
+curl http://127.0.0.1:8391/v1/responses -H "Content-Type: application/json" \
+  -d '{"model":"gpt-oss:120b","input":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}'
+```
+
+`llamacpp-shim/shim.mjs` is a ~80-line, dependency-free Node proxy that rewrites the content-part type on the way through. No config beyond the default port. Ollama does not need it.
 
 ## Option B — Ollama (easiest)
 
@@ -94,6 +112,7 @@ The rule: **one endpoint + one model string.**
 |---|---|---|---|
 | LM Studio | `openai/<loaded-model>` | its local `/v1` | Enable the server in LM Studio first |
 | vLLM | `openai/<served-model>` | `http://host:8000/v1` | Great for multi-GPU serving |
+| llama.cpp | `openai/<model>` | `http://127.0.0.1:8391/v1` | Via the bundled shim; see Option A |
 | Cloud OpenAI-compatible | `openai/<model>` | provider's URL + API key | Keys stay in server `.env` only |
 | Anthropic | `anthropic/claude-sonnet-4.5` | — (not needed) | Set `ANTHROPIC_API_KEY` |
 | Google Gemini | `google/gemini-2.5-pro` | — (not needed) | Set `GOOGLE_API_KEY` |
@@ -108,7 +127,7 @@ curl http://127.0.0.1:<port>/v1/responses -H "Content-Type: application/json" \
   -d '{"model":"<model-name>","input":"ping"}'
 ```
 
-Expected: JSON back with the model's reply. A 404 means that build lacks `/v1/responses` — update it, or use Ollama, or add a chat↔responses proxy.
+Expected: JSON back with the model's reply. A 404 means that build lacks `/v1/responses` — update it, or use Ollama, or add a chat↔responses proxy. (For llama.cpp the repo already ships one: `llamacpp-shim/`.) A **400** with a message about content parts is the other llama.cpp case — use the shim.
 
 **Always run the curl smoke test against whichever backend you choose before proceeding.**
 
@@ -120,6 +139,7 @@ Expected: JSON back with the model's reply. A 404 means that build lacks `/v1/re
 | OOM / model unloads constantly | Not enough RAM/VRAM | Drop to `gpt-oss:20b`, or reduce context length |
 | Very slow first reply | Cold load from disk | Normal — the model loads once, then stays resident |
 | 404 on `/v1/responses` | Backend too old | Upgrade llama.cpp, or use Ollama ≥ 0.13.3 |
+| `400 Bad Request` from llama-server on chat | Content-part type mismatch (`text` vs `input_text`) | Point OpenMuse at the shim (`:8391`), not llama-server directly (`:8080`) |
 | Agent replies but tool calls never run | Wrong `MODEL=` prefix | Keep the `openai/` prefix so the SDK uses the OpenAI-compatible client |
 | Agent gives up mid-run on slow hardware | Run timeout too short | Raise `MODEL_TIMEOUT_MS` in `.env` (default 20 min) |
 

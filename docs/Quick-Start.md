@@ -36,18 +36,22 @@ llama-server -hf ggml-org/gpt-oss-120b-GGUF --jinja --port 8080 --host 127.0.0.1
 # ~61 GiB weights — see docs/Model-Setup.md for sizing
 # smaller machines:
 # llama-server -hf ggml-org/gpt-oss-20b-GGUF --jinja --port 8080 --host 127.0.0.1
-# or with Ollama instead:
+# or with Ollama instead (no shim needed):
 # ollama pull gpt-oss:120b
+
+# Then start the Responses shim (required for llama.cpp — rewrites content-part
+# types so llama-server accepts what OpenMuse sends):
+node llamacpp-shim/shim.mjs        # :8391 → :8080
 ```
 
-Smoke test the Responses API:
+Smoke test the Responses API through the shim:
 
 ```bash
-curl http://127.0.0.1:8080/v1/responses -H "Content-Type: application/json" \
-  -d '{"model":"gpt-oss:120b","input":"ping"}'
+curl http://127.0.0.1:8391/v1/responses -H "Content-Type: application/json" \
+  -d '{"model":"gpt-oss:120b","input":[{"role":"user","content":[{"type":"text","text":"ping"}]}]}'
 ```
 
-You should get JSON back with the model's reply. If not, stop here and read `docs/Model-Setup.md`.
+You should get JSON back with the model's reply. If not, stop here and read `docs/Model-Setup.md`. Start order: llama-server → shim → OpenMuse API → browser worker → web UI.
 
 ## 3. Agent runtime
 
@@ -62,7 +66,7 @@ Edit `.env`:
 ```env
 AGENT_BACKEND=model
 MODEL=openai/gpt-oss:120b
-OPENAI_BASE_URL=http://127.0.0.1:8080/v1      # llama.cpp (default)
+OPENAI_BASE_URL=http://127.0.0.1:8391/v1      # llama.cpp via the Responses shim
 # OPENAI_BASE_URL=http://127.0.0.1:11434/v1   # if you chose Ollama instead
 OPENAI_API_KEY=local
 CPK_INTELLIGENCE_API_KEY=<from npx copilotkit@latest login>

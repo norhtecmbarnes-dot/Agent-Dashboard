@@ -35,7 +35,9 @@ cd Agent-Dashboard
 # 1. Model backend — llama.cpp (default, best performance)
 #    Download the GGUF and start the server (see docs/Model-Setup.md):
 llama-server -hf ggml-org/gpt-oss-120b-GGUF --jinja --port 8080 --host 127.0.0.1
-#    ...or use Ollama if you prefer easy model management:
+#    Start the bundled Responses shim (llama.cpp needs it; Ollama does not):
+node llamacpp-shim/shim.mjs        # :8391 -> :8080
+#    ...or use Ollama if you prefer easy model management (no shim):
 #    ollama pull gpt-oss:120b
 
 # 2. Agent runtime (OpenMuse)
@@ -43,7 +45,7 @@ cd OpenMuse
 pnpm install --frozen-lockfile
 cp .env.example .env
 #    set: MODEL=openai/gpt-oss:120b
-#         OPENAI_BASE_URL=http://127.0.0.1:8080/v1   # llama.cpp
+#         OPENAI_BASE_URL=http://127.0.0.1:8391/v1   # llama.cpp via shim
 #         (or http://127.0.0.1:11434/v1 for Ollama)
 pnpm dev            # API on :8787
 pnpm dev:web        # web UI on :8081 (second terminal)
@@ -77,8 +79,9 @@ Open http://localhost:8081 — or send a Telegram message from your phone.
  Android app (Expo) ──► OpenMuse API (Hono + CopilotKit runtime, :8787)
  Web UI (:8081)         │  AGENT_BACKEND=model
                        │
-                       ├── OPENAI_BASE_URL ──► Ollama (/v1/responses)
-                       │                        └── gpt-oss:120b
+                       ├── OPENAI_BASE_URL ──► Responses shim (:8391)
+                       │                        └── llama.cpp (/v1/responses, :8080)
+                       │                             └── gpt-oss:120b
                        ├── Browser worker (Playwright Chromium, :8790)
                        └── Docker Linux computer (openmuse-computer, isolated /workspace)
 ```
@@ -89,7 +92,8 @@ Open http://localhost:8081 — or send a Telegram message from your phone.
 |---|---|---|
 | **OpenMuse API** | Hono server + CopilotKit runtime, agent loop | `OpenMuse/apps/server` (port 8787) |
 | **Web UI** | Chat, Files, Terminal, Computer panels (Expo web) | `OpenMuse/apps/mobile` (port 8081) |
-| **Ollama** | Serves gpt-oss-120b via `/v1/responses` | `127.0.0.1:11434` |
+| **Responses shim** | Rewrites content-part types so llama.cpp accepts OpenMuse's request shape | `llamacpp-shim/` (port 8391) |
+| **llama.cpp / Ollama** | Serves gpt-oss-120b via `/v1/responses` | `127.0.0.1:8080` (shim) or `:11434` |
 | **Browser worker** | Persistent Playwright Chromium the agent uses | port 8790 |
 | **Docker computer** | Isolated Linux box with terminal + /workspace volume | `apps/computer` |
 | **Telegram bridge** | grammy long-poll ↔ OpenMuse conversation endpoint | `telegram-bridge/` |
